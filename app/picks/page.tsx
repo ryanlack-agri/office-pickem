@@ -60,6 +60,11 @@ export default function PicksPage() {
     .map((g) => g.kickoff)
     .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0];
 
+  const decidedMine = games.filter((g) => g.completed && myPicks[g.id]);
+  const correctCount = decidedMine.filter((g) => myPicks[g.id] === g.winnerAbbr).length;
+  const wrongCount = decidedMine.length - correctCount;
+  const pendingMine = games.filter((g) => !g.completed && myPicks[g.id]).length;
+
   const revealByGame = useMemo(() => {
     const m = new Map<string, { name: string; pick: string }[]>();
     for (const r of reveal) {
@@ -175,6 +180,14 @@ export default function PicksPage() {
         )}
       </div>
 
+      {decidedMine.length > 0 && (
+        <div className="card grid grid-cols-3 overflow-hidden">
+          <RecordStat label="Correct" value={correctCount} tone="turf" />
+          <RecordStat label="Wrong" value={wrongCount} tone="red" />
+          <RecordStat label="Pending" value={pendingMine} tone="muted" />
+        </div>
+      )}
+
       {msg && (
         <p role="status" className="animate-fade-up rounded-lg bg-turf-500/15 px-3 py-2 text-sm text-turf-200">
           {msg}
@@ -220,6 +233,25 @@ export default function PicksPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function RecordStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "turf" | "red" | "muted";
+}) {
+  const color =
+    tone === "turf" ? "text-turf-400" : tone === "red" ? "text-red-400" : "text-ink-muted";
+  return (
+    <div className="flex flex-col items-center gap-0.5 border-r border-turf-500/10 py-4 last:border-r-0">
+      <span className={classNames("tnum font-display text-3xl font-bold", color)}>{value}</span>
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">{label}</span>
     </div>
   );
 }

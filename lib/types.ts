@@ -16,6 +16,7 @@ export type ClientGame = {
   winnerAbbr: string | null;
   shortDetail: string;
   locked: boolean;
+  consensus?: { away: number; home: number; total: number } | null;
 };
 
 export type ClientStanding = {

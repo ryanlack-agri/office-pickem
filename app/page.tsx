@@ -18,6 +18,8 @@ type LeaderboardResp = {
   buyIn: number;
   pot: number;
   potNote: string;
+  weekWinner: { name: string; correct: number; tie: number } | null;
+  weekComplete: boolean;
 };
 
 const money = (n: number) => (n % 1 === 0 ? `$${n.toLocaleString()}` : `$${n.toFixed(2)}`);
@@ -70,6 +72,16 @@ export default function LeaderboardPage() {
         </div>
         <WeekPicker week={week} currentWeek={lb?.currentWeek} onChange={setWeek} />
       </div>
+
+      {lb?.weekWinner && (
+        <WinnerBanner
+          week={lb.week}
+          name={lb.weekWinner.name}
+          correct={lb.weekWinner.correct}
+          tie={lb.weekWinner.tie}
+          complete={lb.weekComplete}
+        />
+      )}
 
       {view === "season" ? (
         loading && !lb ? (
@@ -147,6 +159,51 @@ function PotHero({ lb, loading }: { lb: LeaderboardResp | null; loading: boolean
         </Link>
       </div>
     </section>
+  );
+}
+
+function WinnerBanner({
+  week,
+  name,
+  correct,
+  tie,
+  complete,
+}: {
+  week: number;
+  name: string;
+  correct: number;
+  tie: number;
+  complete: boolean;
+}) {
+  const who = tie > 1 ? `${name} +${tie - 1} tied` : name;
+  if (complete) {
+    return (
+      <div className="animate-fade-up flex items-center gap-3 rounded-2xl border border-gold-400/40 bg-gradient-to-r from-gold-400/20 to-transparent px-4 py-3">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gold-400 text-[#2a1a03]">
+          <Trophy size={20} />
+        </span>
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-widest text-gold-400">
+            Week {week} Champion
+          </p>
+          <p className="font-semibold text-ink">
+            {who} <span className="tnum text-ink-muted">· {correct} correct</span>
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="animate-fade-up flex items-center gap-3 rounded-2xl border border-turf-500/20 bg-turf-500/5 px-4 py-2.5">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-turf-500/15 text-turf-400">
+        <Trophy size={17} />
+      </span>
+      <p className="text-sm text-ink-muted">
+        Week {week} leader so far:{" "}
+        <span className="font-semibold text-ink">{who}</span>
+        <span className="tnum"> · {correct} correct</span>
+      </p>
+    </div>
   );
 }
 

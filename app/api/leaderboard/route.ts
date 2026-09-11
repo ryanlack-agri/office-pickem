@@ -11,7 +11,7 @@ export async function GET(req: Request) {
     const week = Number(searchParams.get("week")) || current.week || 1;
 
     // Refresh the viewed week's live scores so standings move on their own while people watch.
-    await getWeekGames(season, week);
+    const games = await getWeekGames(season, week);
 
     const [{ standings, players }, settings] = await Promise.all([
       getLeaderboard(season, week),
@@ -20,6 +20,16 @@ export async function GET(req: Request) {
 
     const paidCount = standings.filter((s) => s.paid).length;
     const pot = settings.buyIn * paidCount;
+
+    // Weekly winner: who has the most correct picks this week.
+    const anyDecided = games.some((g) => g.completed);
+    const weekComplete = games.length > 0 && games.every((g) => g.completed);
+    let weekWinner: { name: string; correct: number; tie: number } | null = null;
+    const topWeek = Math.max(0, ...standings.map((s) => s.weekCorrect));
+    if (anyDecided && topWeek > 0) {
+      const leaders = standings.filter((s) => s.weekCorrect === topWeek);
+      weekWinner = { name: leaders[0].name, correct: topWeek, tie: leaders.length };
+    }
 
     return Response.json({
       season,
@@ -31,6 +41,8 @@ export async function GET(req: Request) {
       buyIn: settings.buyIn,
       pot,
       potNote: settings.potNote,
+      weekWinner,
+      weekComplete,
     });
   } catch (e: any) {
     return Response.json({ error: e?.message || "Failed to load leaderboard." }, { status: 500 });

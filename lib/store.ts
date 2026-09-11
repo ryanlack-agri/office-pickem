@@ -19,6 +19,7 @@ export type Game = {
   winnerAbbr: string | null;
   shortDetail: string;
   locked: boolean; // kickoff has passed
+  consensus?: { away: number; home: number; total: number } | null;
 };
 
 const STALE_MS = 20_000;

@@ -86,6 +86,45 @@ export default function GameRow({ game: g }: { game: ClientGame }) {
         isWinner={homeWin}
         dim={g.completed && !homeWin}
       />
+
+      {g.consensus && g.consensus.total > 0 && (
+        <ConsensusBar away={g.consensus.away} home={g.consensus.home} awayAbbr={g.awayAbbr} homeAbbr={g.homeAbbr} />
+      )}
+    </div>
+  );
+}
+
+function ConsensusBar({
+  away,
+  home,
+  awayAbbr,
+  homeAbbr,
+}: {
+  away: number;
+  home: number;
+  awayAbbr: string;
+  homeAbbr: string;
+}) {
+  const total = away + home;
+  const awayPct = Math.round((away / total) * 100);
+  const homePct = 100 - awayPct;
+  return (
+    <div className="mt-2.5 border-t border-turf-500/10 pt-2">
+      <div className="mb-1 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide">
+        <span className="text-turf-400">
+          {awayAbbr} {awayPct}%
+        </span>
+        <span className="text-ink-faint">
+          {total} pick{total === 1 ? "" : "s"}
+        </span>
+        <span className="text-gold-400">
+          {homeAbbr} {homePct}%
+        </span>
+      </div>
+      <div className="flex h-1.5 overflow-hidden rounded-full bg-field-700/60">
+        <div className="bg-turf-500" style={{ width: `${awayPct}%` }} />
+        <div className="bg-gold-400" style={{ width: `${homePct}%` }} />
+      </div>
     </div>
   );
 }
