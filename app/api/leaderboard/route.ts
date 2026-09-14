@@ -13,7 +13,7 @@ export async function GET(req: Request) {
     // Refresh the viewed week's live scores so standings move on their own while people watch.
     const games = await getWeekGames(season, week);
 
-    const [{ standings, players }, settings] = await Promise.all([
+    const [{ standings, players, week1Winners }, settings] = await Promise.all([
       getLeaderboard(season, week),
       getSettings(),
     ]);
@@ -43,6 +43,7 @@ export async function GET(req: Request) {
       potNote: settings.potNote,
       weekWinner,
       weekComplete,
+      week1Winners,
     });
   } catch (e: any) {
     return Response.json({ error: e?.message || "Failed to load leaderboard." }, { status: 500 });

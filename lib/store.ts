@@ -127,7 +127,12 @@ export type Standing = {
   decided: number;
   totalPicks: number;
   weekCorrect: number;
+  week1Correct: number;
 };
+
+// Weeks that do NOT count toward the season total (e.g. Week 1 was a late-start warm-up).
+// Winners of these weeks still get a medal; their scores just don't add to the season race.
+export const EXCLUDED_WEEKS = new Set<number>([1]);
 
 /**
  * Season standings plus this-week correct counts. Computed in JS because an office
@@ -136,7 +141,7 @@ export type Standing = {
 export async function getLeaderboard(
   season: number,
   week: number
-): Promise<{ standings: Standing[]; players: number }> {
+): Promise<{ standings: Standing[]; players: number; week1Winners: number[] }> {
   await ensureSchema();
 
   const players = (await sql`SELECT id, name, paid FROM players ORDER BY name`) as any[];
@@ -160,20 +165,28 @@ export async function getLeaderboard(
       decided: 0,
       totalPicks: 0,
       weekCorrect: 0,
+      week1Correct: 0,
     });
   }
 
   for (const pk of picks) {
     const s = byPlayer.get(pk.player_id);
     if (!s) continue;
-    s.totalPicks++;
     const g = gameById.get(pk.game_id);
-    if (g && g.completed) {
-      s.decided++;
-      const isCorrect = g.winner_abbr && pk.pick_abbr === g.winner_abbr;
-      if (isCorrect) {
-        s.correct++;
-        if (pk.week === week) s.weekCorrect++;
+    const isCorrect = Boolean(
+      g && g.completed && g.winner_abbr && pk.pick_abbr === g.winner_abbr
+    );
+
+    // Per-week tallies (always counted — drive the week view and the Week 1 medal).
+    if (isCorrect && pk.week === week) s.weekCorrect++;
+    if (isCorrect && pk.week === 1) s.week1Correct++;
+
+    // Season totals skip any excluded weeks.
+    if (!EXCLUDED_WEEKS.has(pk.week)) {
+      s.totalPicks++;
+      if (g && g.completed) {
+        s.decided++;
+        if (isCorrect) s.correct++;
       }
     }
   }
@@ -182,5 +195,9 @@ export async function getLeaderboard(
     (a, b) => b.correct - a.correct || b.decided - a.decided || a.name.localeCompare(b.name)
   );
 
-  return { standings, players: players.length };
+  const week1Max = Math.max(0, ...standings.map((s) => s.week1Correct));
+  const week1Winners =
+    week1Max > 0 ? standings.filter((s) => s.week1Correct === week1Max).map((s) => s.playerId) : [];
+
+  return { standings, players: players.length, week1Winners };
 }
