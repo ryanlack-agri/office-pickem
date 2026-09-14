@@ -10,6 +10,7 @@ import { Trophy, Football, ListIcon, ChevronRight, Check, XMark } from "@/compon
 
 type RevealPick = { playerId: number; name: string; gameId: string; pick: string };
 type SelectedPlayer = { id: number; name: string };
+type View = "season" | "week" | "recap";
 
 type LeaderboardResp = {
   season: number;
@@ -23,13 +24,57 @@ type LeaderboardResp = {
   potNote: string;
   weekWinner: { name: string; correct: number; tie: number } | null;
   weekComplete: boolean;
+  week1Winners: number[];
 };
 
 const money = (n: number) => (n % 1 === 0 ? `$${n.toLocaleString()}` : `$${n.toFixed(2)}`);
 
+/* ---- small local icons for the recap ---- */
+function Bolt({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" />
+    </svg>
+  );
+}
+function Star({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="m12 3 2.7 5.5 6 .9-4.3 4.2 1 6-5.4-2.8-5.4 2.8 1-6L3.3 9.4l6-.9L12 3Z" />
+    </svg>
+  );
+}
+function TrendUp({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 17l6-6 4 4 8-8" />
+      <path d="M15 7h6v6" />
+    </svg>
+  );
+}
+function TrendDown({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7l6 6 4-4 8 8" />
+      <path d="M15 17h6v-6" />
+    </svg>
+  );
+}
+
+function Week1Medal() {
+  return (
+    <span
+      title="Week 1 champ"
+      className="ml-2 inline-flex items-center gap-1 rounded-full bg-gold-400/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gold-300"
+    >
+      <Trophy size={10} /> Wk 1
+    </span>
+  );
+}
+
 export default function LeaderboardPage() {
   const [week, setWeek] = useState<number | null>(null);
-  const [view, setView] = useState<"season" | "week">("season");
+  const [view, setView] = useState<View>("season");
   const [lb, setLb] = useState<LeaderboardResp | null>(null);
   const [games, setGames] = useState<ClientGame[]>([]);
   const [revealed, setRevealed] = useState<RevealPick[]>([]);
@@ -63,6 +108,7 @@ export default function LeaderboardPage() {
   }, [week, load]);
 
   const standings = lb?.standings ?? [];
+  const week1 = lb?.week1Winners ?? [];
 
   return (
     <div className="space-y-6">
@@ -76,11 +122,14 @@ export default function LeaderboardPage() {
           <ToggleButton active={view === "week"} onClick={() => setView("week")} Icon={ListIcon}>
             This Week
           </ToggleButton>
+          <ToggleButton active={view === "recap"} onClick={() => setView("recap")} Icon={Bolt}>
+            Recap
+          </ToggleButton>
         </div>
         <WeekPicker week={week} currentWeek={lb?.currentWeek} onChange={setWeek} />
       </div>
 
-      {lb?.weekWinner && (
+      {view !== "recap" && lb?.weekWinner && (
         <WinnerBanner
           week={lb.week}
           name={lb.weekWinner.name}
@@ -90,16 +139,24 @@ export default function LeaderboardPage() {
         />
       )}
 
-      {view === "season" ? (
-        loading && !lb ? (
+      {view === "season" &&
+        (loading && !lb ? (
           <StandingsSkeleton />
         ) : (
-          <SeasonView standings={standings} week={week} onSelect={setSelected} />
-        )
-      ) : loading && games.length === 0 ? (
-        <GamesSkeleton />
-      ) : (
-        <WeekView games={games} />
+          <SeasonView standings={standings} week={week} week1={week1} onSelect={setSelected} />
+        ))}
+
+      {view === "week" &&
+        (loading && games.length === 0 ? <GamesSkeleton /> : <WeekView games={games} />)}
+
+      {view === "recap" && (
+        <RecapView
+          games={games}
+          revealed={revealed}
+          standings={standings}
+          week={lb?.week ?? week ?? 1}
+          loading={loading}
+        />
       )}
 
       {selected && (
@@ -130,7 +187,7 @@ function ToggleButton({
     <button
       onClick={onClick}
       className={classNames(
-        "flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition",
+        "flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold transition",
         active ? "bg-turf-500 text-field-950" : "text-ink-muted hover:text-ink"
       )}
     >
@@ -227,10 +284,12 @@ function WinnerBanner({
 function SeasonView({
   standings,
   week,
+  week1,
   onSelect,
 }: {
   standings: ClientStanding[];
   week: number | null;
+  week1: number[];
   onSelect: (p: SelectedPlayer) => void;
 }) {
   if (standings.length === 0) {
@@ -247,19 +306,24 @@ function SeasonView({
     );
   }
   return (
-    <div className="animate-fade-up space-y-5">
-      {standings.length >= 3 && <Podium top3={standings.slice(0, 3)} onSelect={onSelect} />}
-      <StandingsTable standings={standings} week={week} onSelect={onSelect} />
-      <p className="text-center text-xs text-ink-faint">Tap any player to see their picks.</p>
+    <div className="animate-fade-up space-y-4">
+      {standings.length >= 3 && <Podium top3={standings.slice(0, 3)} week1={week1} onSelect={onSelect} />}
+      <StandingsTable standings={standings} week={week} week1={week1} onSelect={onSelect} />
+      <p className="text-center text-xs text-ink-faint">
+        Tap any player to see their picks · Week 1 didn&apos;t count toward the season, but the champs
+        keep the medal.
+      </p>
     </div>
   );
 }
 
 function Podium({
   top3,
+  week1,
   onSelect,
 }: {
   top3: ClientStanding[];
+  week1: number[];
   onSelect: (p: SelectedPlayer) => void;
 }) {
   const order = [top3[1], top3[0], top3[2]];
@@ -285,17 +349,17 @@ function Podium({
                 m.ring
               )}
             >
-              <span
-                className={classNames(
-                  "mb-2 grid h-7 w-7 place-items-center rounded-full text-sm font-bold",
-                  m.badge
-                )}
-              >
+              <span className={classNames("mb-2 grid h-7 w-7 place-items-center rounded-full text-sm font-bold", m.badge)}>
                 {m.place}
               </span>
               <span className="line-clamp-1 max-w-full break-all text-sm font-semibold text-ink">
                 {s.name}
               </span>
+              {week1.includes(s.playerId) && (
+                <span className="mt-1 inline-flex items-center gap-0.5 rounded-full bg-gold-400/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-gold-300">
+                  <Trophy size={9} /> Wk 1
+                </span>
+              )}
               <span className="tnum mt-1 font-display text-2xl font-bold text-ink">{s.correct}</span>
               <span className="text-[11px] uppercase tracking-wide text-ink-faint">correct</span>
             </div>
@@ -309,10 +373,12 @@ function Podium({
 function StandingsTable({
   standings,
   week,
+  week1,
   onSelect,
 }: {
   standings: ClientStanding[];
   week: number | null;
+  week1: number[];
   onSelect: (p: SelectedPlayer) => void;
 }) {
   return (
@@ -352,6 +418,7 @@ function StandingsTable({
                         paid
                       </span>
                     )}
+                    {week1.includes(s.playerId) && <Week1Medal />}
                   </td>
                   <td className="tnum px-4 py-3 text-right font-display text-lg font-bold text-ink">
                     {s.correct}
@@ -387,16 +454,239 @@ function RankBadge({ rank }: { rank: number }) {
   if (rank <= 3) {
     return (
       <span
-        className={classNames(
-          "tnum grid h-6 w-6 place-items-center rounded-full text-xs font-bold",
-          styles[rank]
-        )}
+        className={classNames("tnum grid h-6 w-6 place-items-center rounded-full text-xs font-bold", styles[rank])}
       >
         {rank}
       </span>
     );
   }
   return <span className="tnum pl-1.5 font-semibold text-ink-faint">{rank}</span>;
+}
+
+/* ---------------- Weekly recap ---------------- */
+
+type RecapCardData = { accent: string; icon: JSX.Element; label: string; title: string; detail: string };
+
+function joinNames(ns: string[]): string {
+  if (ns.length === 1) return ns[0];
+  if (ns.length === 2) return `${ns[0]} & ${ns[1]}`;
+  return `${ns[0]}, ${ns[1]} +${ns.length - 2}`;
+}
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function computeRecap(
+  games: ClientGame[],
+  revealed: RevealPick[],
+  standings: ClientStanding[]
+): RecapCardData[] {
+  const cards: RecapCardData[] = [];
+  const completed = games.filter((g) => g.completed && g.winnerAbbr && g.winnerAbbr !== "TIE");
+  if (completed.length === 0) return cards;
+
+  const byGame = new Map<string, RevealPick[]>();
+  for (const r of revealed) {
+    if (!byGame.has(r.gameId)) byGame.set(r.gameId, []);
+    byGame.get(r.gameId)!.push(r);
+  }
+  const winnerName = (g: ClientGame) => (g.winnerAbbr === g.homeAbbr ? g.homeName : g.awayName);
+
+  const stats = completed.map((g) => {
+    const picks = byGame.get(g.id) || [];
+    const winners = picks.filter((p) => p.pick === g.winnerAbbr);
+    return { g, total: picks.length, winners, wc: winners.length, pct: picks.length ? winners.length / picks.length : null };
+  });
+
+  const agg = new Map<number, { name: string; correct: number; made: number }>();
+  for (const g of completed) {
+    for (const p of byGame.get(g.id) || []) {
+      if (!agg.has(p.playerId)) agg.set(p.playerId, { name: p.name, correct: 0, made: 0 });
+      const a = agg.get(p.playerId)!;
+      a.made++;
+      if (p.pick === g.winnerAbbr) a.correct++;
+    }
+  }
+  const players = Array.from(agg.values());
+
+  // Top of the week
+  if (players.length) {
+    const max = Math.max(...players.map((p) => p.correct));
+    const tops = players.filter((p) => p.correct === max && p.made > 0);
+    if (max > 0 && tops.length) {
+      cards.push({
+        accent: "gold",
+        icon: <Trophy size={20} />,
+        label: "Top of the week",
+        title: joinNames(tops.map((t) => t.name)),
+        detail: `Best score in the room — ${max} correct.`,
+      });
+    }
+  }
+
+  // Biggest upset (game the office got most wrong)
+  const withPct = stats.filter((s) => s.total > 0);
+  if (withPct.length) {
+    const up = withPct.slice().sort((a, b) => (a.pct as number) - (b.pct as number))[0];
+    if ((up.pct as number) <= 0.5) {
+      const wn = winnerName(up.g);
+      const sc = `${up.g.awayAbbr} ${up.g.awayScore}, ${up.g.homeAbbr} ${up.g.homeScore}`;
+      cards.push(
+        up.wc === 0
+          ? {
+              accent: "red",
+              icon: <Bolt size={20} />,
+              label: "Biggest upset",
+              title: `Nobody saw ${wn} coming`,
+              detail: `All ${up.total} of you took the other side. Final: ${sc}.`,
+            }
+          : {
+              accent: "red",
+              icon: <Bolt size={20} />,
+              label: "Biggest upset",
+              title: `${wn} shocked the pool`,
+              detail: `Only ${up.wc} of ${up.total} picked them. Final: ${sc}.`,
+            }
+      );
+    }
+  }
+
+  // Lone wolf
+  const lone = stats.filter((s) => s.wc === 1 && s.total >= 3).sort((a, b) => b.total - a.total)[0];
+  if (lone) {
+    cards.push({
+      accent: "purple",
+      icon: <Star size={18} />,
+      label: "Lone wolf",
+      title: `${lone.winners[0].name} went it alone`,
+      detail: `The only one to call ${winnerName(lone.g)}. The other ${lone.total - 1} missed it.`,
+    });
+  }
+
+  // Perfect card
+  if (completed.length >= 3) {
+    const perfects = players
+      .filter((p) => p.made >= Math.ceil(completed.length * 0.8) && p.correct === p.made && p.made > 0)
+      .sort((a, b) => b.made - a.made);
+    if (perfects.length) {
+      const p = perfects[0];
+      cards.push({
+        accent: "turf",
+        icon: <Check size={20} />,
+        label: "Perfect card",
+        title: `${p.name} ran the table`,
+        detail: `A clean ${p.correct}-for-${p.made} on the week.`,
+      });
+    }
+  }
+
+  // Stepped up / cooled off (this week's rank vs season standing)
+  if (standings.length >= 5) {
+    const weekSorted = [...standings].sort((a, b) => b.weekCorrect - a.weekCorrect);
+    const weekRank = new Map(weekSorted.map((s, i) => [s.playerId, i]));
+    const ranked = standings.map((s, sr) => ({ s, sr, wr: weekRank.get(s.playerId) ?? sr, delta: sr - (weekRank.get(s.playerId) ?? sr) }));
+    const riser = ranked.filter((r) => r.delta >= 2 && r.s.weekCorrect > 0).sort((a, b) => b.delta - a.delta)[0];
+    const faller = ranked.filter((r) => r.delta <= -2).sort((a, b) => a.delta - b.delta)[0];
+    if (riser) {
+      cards.push({
+        accent: "blue",
+        icon: <TrendUp size={18} />,
+        label: "On the rise",
+        title: `${riser.s.name} stepped up`,
+        detail: `Sits ${ordinal(riser.sr + 1)} overall but posted the ${ordinal(riser.wr + 1)}-best week.`,
+      });
+    }
+    if (faller) {
+      cards.push({
+        accent: "slate",
+        icon: <TrendDown size={18} />,
+        label: "Cooled off",
+        title: `Off week for ${faller.s.name}`,
+        detail: `Usually ${ordinal(faller.sr + 1)} overall, but only the ${ordinal(faller.wr + 1)}-best week.`,
+      });
+    }
+  }
+
+  return cards.slice(0, 6);
+}
+
+function RecapView({
+  games,
+  revealed,
+  standings,
+  week,
+  loading,
+}: {
+  games: ClientGame[];
+  revealed: RevealPick[];
+  standings: ClientStanding[];
+  week: number;
+  loading: boolean;
+}) {
+  const cards = useMemo(() => computeRecap(games, revealed, standings), [games, revealed, standings]);
+
+  if (loading && games.length === 0) return <GamesSkeleton />;
+
+  const completedCount = games.filter((g) => g.completed).length;
+  if (completedCount === 0) {
+    return (
+      <div className="card animate-fade-up p-8 text-center text-ink-muted">
+        Week {week}&apos;s recap posts once the games start finishing. Check back after kickoff.
+      </div>
+    );
+  }
+  const allDone = completedCount === games.length;
+
+  return (
+    <div className="animate-fade-up space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="font-display text-lg font-bold text-ink">Week {week} recap</h2>
+        {!allDone && (
+          <span className="text-xs text-ink-faint">
+            {completedCount}/{games.length} final · still updating
+          </span>
+        )}
+      </div>
+      {cards.length === 0 ? (
+        <div className="card p-6 text-center text-ink-muted">
+          Nothing wild yet. More storylines land as the games wrap up.
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {cards.map((c, i) => (
+            <RecapCard key={i} {...c} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const RECAP_ACCENTS: Record<string, string> = {
+  gold: "bg-gold-400/15 text-gold-400",
+  red: "bg-red-500/15 text-red-400",
+  purple: "bg-purple-500/15 text-purple-300",
+  turf: "bg-turf-500/15 text-turf-400",
+  blue: "bg-blue-500/15 text-blue-300",
+  slate: "bg-slate-400/15 text-slate-300",
+};
+
+function RecapCard({ accent, icon, label, title, detail }: RecapCardData) {
+  const a = RECAP_ACCENTS[accent] || RECAP_ACCENTS.turf;
+  return (
+    <div className="card flex gap-3 p-4">
+      <span className={classNames("grid h-10 w-10 shrink-0 place-items-center rounded-xl", a)}>{icon}</span>
+      <div className="min-w-0">
+        <p className={classNames("text-[11px] font-bold uppercase tracking-widest", a.split(" ")[1])}>
+          {label}
+        </p>
+        <p className="font-semibold text-ink">{title}</p>
+        <p className="mt-0.5 text-sm text-ink-muted">{detail}</p>
+      </div>
+    </div>
+  );
 }
 
 /* ---------------- Player picks modal ---------------- */
