@@ -117,7 +117,7 @@ export default function LeaderboardPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex rounded-xl border border-turf-500/20 bg-field-900/60 p-1">
           <ToggleButton active={view === "season"} onClick={() => setView("season")} Icon={Trophy}>
-            Season
+            Overall
           </ToggleButton>
           <ToggleButton active={view === "week"} onClick={() => setView("week")} Icon={ListIcon}>
             This Week
@@ -472,6 +472,12 @@ function joinNames(ns: string[]): string {
   if (ns.length === 2) return `${ns[0]} & ${ns[1]}`;
   return `${ns[0]}, ${ns[1]} +${ns.length - 2}`;
 }
+// Full list, everyone named — used where nobody should get cut off.
+function joinAll(ns: string[]): string {
+  if (ns.length === 1) return ns[0];
+  if (ns.length === 2) return `${ns[0]} & ${ns[1]}`;
+  return `${ns.slice(0, -1).join(", ")} & ${ns[ns.length - 1]}`;
+}
 function ordinal(n: number): string {
   const s = ["th", "st", "nd", "rd"];
   const v = n % 100;
@@ -511,7 +517,7 @@ function computeRecap(
   }
   const players = Array.from(agg.values());
 
-  // Top of the week
+  // Top of the week — name EVERYONE who tied for the lead, no truncation.
   if (players.length) {
     const max = Math.max(...players.map((p) => p.correct));
     const tops = players.filter((p) => p.correct === max && p.made > 0);
@@ -520,8 +526,11 @@ function computeRecap(
         accent: "gold",
         icon: <Trophy size={20} />,
         label: "Top of the week",
-        title: joinNames(tops.map((t) => t.name)),
-        detail: `Best score in the room — ${max} correct.`,
+        title: joinAll(tops.map((t) => t.name)),
+        detail:
+          tops.length === 1
+            ? `Best card in the building at ${max} correct. Everyone else is playing for second.`
+            : `${tops.length}-way tie at the top, ${max} apiece. Nobody could shake the pack.`,
       });
     }
   }
@@ -540,14 +549,14 @@ function computeRecap(
               icon: <Bolt size={20} />,
               label: "Biggest upset",
               title: `Nobody saw ${wn} coming`,
-              detail: `All ${up.total} of you took the other side. Final: ${sc}.`,
+              detail: `The whole room whiffed. All ${up.total} took the other side. Final: ${sc}.`,
             }
           : {
               accent: "red",
               icon: <Bolt size={20} />,
               label: "Biggest upset",
               title: `${wn} shocked the pool`,
-              detail: `Only ${up.wc} of ${up.total} picked them. Final: ${sc}.`,
+              detail: `Only ${up.wc} of ${up.total} saw it. The other ${up.total - up.wc} are still confused. Final: ${sc}.`,
             }
       );
     }
@@ -560,8 +569,8 @@ function computeRecap(
       accent: "purple",
       icon: <Star size={18} />,
       label: "Lone wolf",
-      title: `${lone.winners[0].name} went it alone`,
-      detail: `The only one to call ${winnerName(lone.g)}. The other ${lone.total - 1} missed it.`,
+      title: `${lone.winners[0].name} went rogue and cashed`,
+      detail: `The ONLY one to call ${winnerName(lone.g)}. The other ${lone.total - 1} folded like lawn chairs.`,
     });
   }
 
@@ -577,13 +586,36 @@ function computeRecap(
         icon: <Check size={20} />,
         label: "Perfect card",
         title: `${p.name} ran the table`,
-        detail: `A clean ${p.correct}-for-${p.made} on the week.`,
+        detail: `A flawless ${p.correct}-for-${p.made}. Good luck hearing the end of it.`,
       });
     }
   }
 
-  // Stepped up / cooled off (this week's rank vs season standing)
-  if (standings.length >= 5) {
+  // Cellar dweller — rib whoever finished dead last on a full card. Good-natured.
+  if (players.length >= 4) {
+    const fullSlate = players.filter((p) => p.made >= Math.ceil(completed.length * 0.8));
+    if (fullSlate.length >= 4) {
+      const maxCorrect = Math.max(...fullSlate.map((p) => p.correct));
+      const minCorrect = Math.min(...fullSlate.map((p) => p.correct));
+      const bottoms = fullSlate.filter((p) => p.correct === minCorrect);
+      if (minCorrect < maxCorrect && bottoms.length === 1) {
+        const b = bottoms[0];
+        cards.push({
+          accent: "slate",
+          icon: <TrendDown size={18} />,
+          label: "Cellar dweller",
+          title: `Rough week for ${b.name}`,
+          detail: `Dead last at ${b.correct}-for-${b.made}. The picks are public now, ${b.name}. Nowhere to hide.`,
+        });
+      }
+    }
+  }
+
+  // Stepped up / cooled off — only once a counting week has actually been scored.
+  // With just the excluded Week 1 in the books, the season ranks are empty and this
+  // would be pure noise, so it stays hidden until there's real season data.
+  const hasSeasonData = standings.some((s) => s.decided > 0);
+  if (hasSeasonData && standings.length >= 5) {
     const weekSorted = [...standings].sort((a, b) => b.weekCorrect - a.weekCorrect);
     const weekRank = new Map(weekSorted.map((s, i) => [s.playerId, i]));
     const ranked = standings.map((s, sr) => ({ s, sr, wr: weekRank.get(s.playerId) ?? sr, delta: sr - (weekRank.get(s.playerId) ?? sr) }));
