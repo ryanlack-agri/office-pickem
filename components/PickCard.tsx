@@ -1,8 +1,8 @@
 "use client";
 
 import { ClientGame } from "@/lib/types";
-import { classNames, shortKickoff, timeUntil } from "@/lib/util";
-import { Check, XMark, Lock, Clock } from "@/components/icons";
+import { classNames, shortKickoff } from "@/lib/util";
+import { Check, XMark, Lock } from "@/components/icons";
 
 type RevealPick = { name: string; pick: string };
 
@@ -87,14 +87,18 @@ export default function PickCard({
   onPick,
   reveal,
   showReveal,
+  weekLocked,
 }: {
   game: ClientGame;
   myPick: string | undefined;
   onPick: (abbr: string) => void;
   reveal: RevealPick[];
   showReveal: boolean;
+  weekLocked: boolean;
 }) {
-  const locked = g.locked;
+  // The whole week locks together at the first kickoff, so a card is editable
+  // right up until then even if this particular game is later in the week.
+  const locked = weekLocked;
   const gotIt = Boolean(g.completed && myPick && myPick === g.winnerAbbr);
   const missed = Boolean(g.completed && myPick && g.winnerAbbr && myPick !== g.winnerAbbr);
 
@@ -115,9 +119,13 @@ export default function PickCard({
             : shortKickoff(g.kickoff)}
         </span>
         {!locked ? (
-          <span className="flex items-center gap-1 text-[11px] font-semibold text-turf-400">
-            <Clock size={13} /> Locks in {timeUntil(g.kickoff)}
-          </span>
+          myPick ? (
+            <span className="flex items-center gap-1 text-[11px] font-semibold text-turf-400">
+              <Check size={13} /> Picked
+            </span>
+          ) : (
+            <span className="text-[11px] font-semibold text-ink-faint">Tap a team</span>
+          )
         ) : gotIt ? (
           <span className="flex items-center gap-1 text-[11px] font-bold uppercase text-turf-400">
             <Check size={13} /> Got it
