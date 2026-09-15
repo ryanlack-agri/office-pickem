@@ -21,10 +21,12 @@ export async function GET(req: Request) {
     const session = await getSession();
 
     const games = await getWeekGames(season, week);
-    const lockedIds = new Set(games.filter((g) => g.locked).map((g) => g.id));
-    const lastKickoff = games.length
-      ? Math.max(...games.map((g) => new Date(g.kickoff).getTime()))
-      : 0;
+    // The whole week locks the moment the first game kicks off. Until then picks are
+    // editable and hidden; after it, no edits and everyone's picks are revealed at once.
+    const kickoffs = games.map((g) => new Date(g.kickoff).getTime());
+    const firstKickoff = kickoffs.length ? Math.min(...kickoffs) : 0;
+    const lastKickoff = kickoffs.length ? Math.max(...kickoffs) : 0;
+    const weekLocked = firstKickoff > 0 && Date.now() >= firstKickoff;
     const tiebreakerRevealed = lastKickoff > 0 && Date.now() >= lastKickoff;
 
     const allPicks = (await sql`
@@ -33,9 +35,9 @@ export async function GET(req: Request) {
       WHERE pk.season = ${season} AND pk.week = ${week}
     `) as any[];
 
-    const revealed = allPicks
-      .filter((r) => lockedIds.has(r.game_id))
-      .map((r) => ({ playerId: r.player_id, name: r.name, gameId: r.game_id, pick: r.pick_abbr }));
+    const revealed = weekLocked
+      ? allPicks.map((r) => ({ playerId: r.player_id, name: r.name, gameId: r.game_id, pick: r.pick_abbr }))
+      : [];
 
     let myPicks: Record<string, string> = {};
     let myTiebreaker: number | null = null;
@@ -62,6 +64,8 @@ export async function GET(req: Request) {
       season,
       week,
       loggedIn: Boolean(session),
+      weekLocked,
+      firstKickoff: firstKickoff ? new Date(firstKickoff).toISOString() : null,
       myPicks,
       myTiebreaker,
       revealed,
@@ -87,6 +91,17 @@ export async function POST(req: Request) {
 
     const submitted: Record<string, string> = body?.picks || {};
     const games = await getWeekGames(season, week);
+
+    // Once the first game of the week kicks off, the whole slate is locked.
+    const kickoffs = games.map((g) => new Date(g.kickoff).getTime());
+    const firstKickoff = kickoffs.length ? Math.min(...kickoffs) : 0;
+    if (firstKickoff > 0 && Date.now() >= firstKickoff) {
+      return Response.json(
+        { error: "Picks are locked. The first game of the week has already kicked off." },
+        { status: 403 }
+      );
+    }
+
     const gameById = new Map(games.map((g) => [g.id, g]));
 
     let saved = 0;
