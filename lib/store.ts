@@ -144,6 +144,9 @@ export async function getLeaderboard(
 ): Promise<{ standings: Standing[]; players: number; week1Winners: number[] }> {
   await ensureSchema();
 
+  // Every registered player, regardless of which week is being viewed. This is what
+  // keeps the season pot and the "paid" markers constant all season instead of
+  // resetting each week (paid is a season-long flag on the player, not per-week).
   const players = (await sql`SELECT id, name, paid FROM players ORDER BY name`) as any[];
   const picks = (await sql`
     SELECT player_id, game_id, week, pick_abbr FROM picks WHERE season = ${season}
