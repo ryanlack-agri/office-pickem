@@ -1,3 +1,6 @@
+// Season pot + paid markers are season-long: this route rebuild forces the
+// leaderboard function to re-bundle the current getLeaderboard (all players,
+// every week), not a stale copy. See lib/store.ts getLeaderboard.
 import { SEASON } from "@/lib/db";
 import { getCurrent, getWeekGames, getLeaderboard, getSettings } from "@/lib/store";
 
@@ -18,6 +21,7 @@ export async function GET(req: Request) {
       getSettings(),
     ]);
 
+    // Pot and paid markers are season-long: every registered player counts, every week.
     const paidCount = standings.filter((s) => s.paid).length;
     const pot = settings.buyIn * paidCount;
 
