@@ -1,31 +1,40 @@
 import { sql, ensureSchema } from "@/lib/db";
-import { getLeaderboard, getCurrent } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
+function maskHost(url: string): string {
+  const m = url.match(/@([^/?]+)/);
+  return m ? m[1] : "none";
+}
+
+export async function GET() {
   try {
     await ensureSchema();
-    const { searchParams } = new URL(req.url);
-    const current = await getCurrent();
-    const season = Number(searchParams.get("season")) || current.season || 2026;
-    const week = Number(searchParams.get("week")) || current.week || 1;
 
-    // Plain, week-independent read straight from the table.
-    const rawRows = (await sql`SELECT id, name, paid FROM players ORDER BY name`) as any[];
+    const dbUrl = process.env.DATABASE_URL || "";
+    const pgUrl = process.env.POSTGRES_URL || "";
+    const unpooled = process.env.DATABASE_URL_UNPOOLED || process.env.POSTGRES_URL_NON_POOLING || "";
+    const usedUrl = dbUrl || pgUrl || unpooled;
 
-    // What getLeaderboard actually returns for this week (should match rawRows count).
-    const lb = await getLeaderboard(season, week);
+    const rows = (await sql`SELECT id, name FROM players ORDER BY name`) as any[];
+    const meta = (await sql`
+      SELECT current_database() AS db,
+             current_setting('neon.endpoint_id', true) AS endpoint,
+             current_setting('neon.branch_id', true) AS branch,
+             inet_server_addr()::text AS addr,
+             pg_backend_pid() AS pid
+    `) as any[];
 
     return Response.json({
-      build: "diag-2",
-      week,
-      rawPlayerCount: rawRows.length,
-      rawPaidCount: rawRows.filter((r) => r.paid).length,
-      lbPlayers: lb.players,
-      lbStandingsLen: lb.standings.length,
-      lbPaidCount: lb.standings.filter((s) => s.paid).length,
-      rawNames: rawRows.map((r) => r.name),
+      build: "diag-3",
+      count: rows.length,
+      usedHost: maskHost(usedUrl),
+      whichVar: dbUrl ? "DATABASE_URL" : pgUrl ? "POSTGRES_URL" : unpooled ? "UNPOOLED" : "none",
+      dbHost: maskHost(dbUrl),
+      pgHost: maskHost(pgUrl),
+      unpooledHost: maskHost(unpooled),
+      meta: meta[0] || null,
+      names: rows.map((r) => r.name),
     });
   } catch (e: any) {
     return Response.json({ error: e?.message || "diag failed", stack: e?.stack }, { status: 500 });
