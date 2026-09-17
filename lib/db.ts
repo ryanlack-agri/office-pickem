@@ -1,9 +1,15 @@
 import { neon } from "@neondatabase/serverless";
 
+// Use the DIRECT (unpooled) endpoint, not the pgbouncer pooler. The pooled
+// endpoint was handing different serverless instances connections to diverged
+// backends, so the same `SELECT ... FROM players` returned different row counts
+// on different requests (the pot/paid "reset"). The direct compute is the single
+// source of truth. Fall back to the pooled URLs only if the unpooled ones are unset.
 const connectionString =
+  process.env.DATABASE_URL_UNPOOLED ||
+  process.env.POSTGRES_URL_NON_POOLING ||
   process.env.DATABASE_URL ||
   process.env.POSTGRES_URL ||
-  process.env.DATABASE_URL_UNPOOLED ||
   "";
 
 if (!connectionString && process.env.NODE_ENV !== "production") {
@@ -73,6 +79,7 @@ async function createSchema(): Promise<void> {
     CREATE TABLE IF NOT EXISTS picks (
       id SERIAL PRIMARY KEY,
       player_id INT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      
       season INT NOT NULL,
       week INT NOT NULL,
       game_id TEXT NOT NULL,
