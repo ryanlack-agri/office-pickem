@@ -6,11 +6,12 @@ import { ClientGame, ClientStanding } from "@/lib/types";
 import { classNames } from "@/lib/util";
 import GameRow from "@/components/GameRow";
 import WeekPicker from "@/components/WeekPicker";
+import PickBoard from "@/components/PickBoard";
 import { Trophy, Football, ListIcon, ChevronRight, Check, XMark } from "@/components/icons";
 
 type RevealPick = { playerId: number; name: string; gameId: string; pick: string };
 type SelectedPlayer = { id: number; name: string };
-type View = "season" | "week" | "recap";
+type View = "season" | "week" | "board" | "recap";
 
 type LeaderboardResp = {
   season: number;
@@ -57,6 +58,14 @@ function TrendDown({ size = 18 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 7l6 6 4-4 8 8" />
       <path d="M15 17h6v-6" />
+    </svg>
+  );
+}
+function Grid({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M3 9h18M3 15h18M9 3v18" />
     </svg>
   );
 }
@@ -115,12 +124,15 @@ export default function LeaderboardPage() {
       <PotHero lb={lb} loading={loading} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-xl border border-turf-500/20 bg-field-900/60 p-1">
+        <div className="inline-flex max-w-full overflow-x-auto rounded-xl border border-turf-500/20 bg-field-900/60 p-1">
           <ToggleButton active={view === "season"} onClick={() => setView("season")} Icon={Trophy}>
             Overall
           </ToggleButton>
           <ToggleButton active={view === "week"} onClick={() => setView("week")} Icon={ListIcon}>
             This Week
+          </ToggleButton>
+          <ToggleButton active={view === "board"} onClick={() => setView("board")} Icon={Grid}>
+            Board
           </ToggleButton>
           <ToggleButton active={view === "recap"} onClick={() => setView("recap")} Icon={Bolt}>
             Recap
@@ -148,6 +160,15 @@ export default function LeaderboardPage() {
 
       {view === "week" &&
         (loading && games.length === 0 ? <GamesSkeleton /> : <WeekView games={games} />)}
+
+      {view === "board" && (
+        <PickBoard
+          games={games}
+          revealed={revealed}
+          week={lb?.week ?? week ?? 1}
+          loading={loading}
+        />
+      )}
 
       {view === "recap" && (
         <RecapView
@@ -187,7 +208,7 @@ function ToggleButton({
     <button
       onClick={onClick}
       className={classNames(
-        "flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold transition",
+        "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-semibold transition",
         active ? "bg-turf-500 text-field-950" : "text-ink-muted hover:text-ink"
       )}
     >
